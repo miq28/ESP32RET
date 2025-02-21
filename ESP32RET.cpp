@@ -39,7 +39,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "can_manager.h"
 #include "lawicel.h"
 
-//on the S3 we want the default pins to be different
+// on the S3 we want the default pins to be different
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 MCP2517FD CAN1(10, 3);
 #endif
@@ -64,36 +64,37 @@ ELM327Emu elmEmulator;
 
 WiFiManager wifiManager;
 
-GVRET_Comm_Handler serialGVRET; //gvret protocol over the serial to USB connection
-GVRET_Comm_Handler wifiGVRET; //GVRET over the wifi telnet port
-CANManager canManager; //keeps track of bus load and abstracts away some details of how things are done
+GVRET_Comm_Handler serialGVRET; // gvret protocol over the serial to USB connection
+GVRET_Comm_Handler wifiGVRET;   // GVRET over the wifi telnet port
+CANManager canManager;          // keeps track of bus load and abstracts away some details of how things are done
 LAWICELHandler lawicel;
 
 SerialConsole console;
 
-CRGB leds[A5_NUM_LEDS]; //A5 has the largest # of LEDs so use that one even for A0 or EVTV
+CRGB leds[A5_NUM_LEDS]; // A5 has the largest # of LEDs so use that one even for A0 or EVTV
 
 CAN_COMMON *canBuses[NUM_BUSES];
 
-//initializes all the system EEPROM values. Chances are this should be broken out a bit but
-//there is only one checksum check for all of them so it's simple to do it all here.
+// initializes all the system EEPROM values. Chances are this should be broken out a bit but
+// there is only one checksum check for all of them so it's simple to do it all here.
 void loadSettings()
 {
     Logger::console("Loading settings....");
 
-    //Logger::console("%i\n", espChipRevision);
+    // Logger::console("%i\n", espChipRevision);
 
-    for (int i = 0; i < NUM_BUSES; i++) canBuses[i] = nullptr;
+    for (int i = 0; i < NUM_BUSES; i++)
+        canBuses[i] = nullptr;
 
     nvPrefs.begin(PREF_NAME, false);
 
     settings.useBinarySerialComm = nvPrefs.getBool("binarycomm", false);
-    settings.logLevel = nvPrefs.getUChar("loglevel", 1); //info
-    settings.wifiMode = nvPrefs.getUChar("wifiMode", 2); //Wifi defaults to creating an AP
+    settings.logLevel = nvPrefs.getUChar("loglevel", 1); // info
+    settings.wifiMode = nvPrefs.getUChar("wifiMode", 2); // Wifi defaults to creating an AP
     settings.enableBT = nvPrefs.getBool("enable-bt", false);
     settings.enableLawicel = nvPrefs.getBool("enableLawicel", true);
 
-    uint8_t defaultVal = (espChipRevision > 2) ? 0 : 1; //0 = A0, 1 = EVTV ESP32
+    uint8_t defaultVal = (espChipRevision > 2) ? 0 : 1; // 0 = A0, 1 = EVTV ESP32
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     defaultVal = 3;
 #endif
@@ -103,10 +104,11 @@ void loadSettings()
     {
         Logger::console("Running on Macchina A0");
         canBuses[0] = &CAN0;
-        SysSettings.LED_CANTX = 255;
-        SysSettings.LED_CANRX = 255;
-        SysSettings.LED_LOGGING = 255;
-        SysSettings.LED_CONNECTION_STATUS = 0;
+        SysSettings.LED_CANTX = LED_BUILTIN;
+        SysSettings.LED_CANRX = LED_BUILTIN;
+        SysSettings.LED_LOGGING = LED_BUILTIN;
+        // SysSettings.LED_CONNECTION_STATUS = 0;
+        SysSettings.LED_CONNECTION_STATUS = LED_BUILTIN;        
         SysSettings.fancyLED = true;
         SysSettings.logToggle = false;
         SysSettings.txToggle = true;
@@ -115,19 +117,23 @@ void loadSettings()
         SysSettings.lawicelMode = false;
         SysSettings.lawicellExtendedMode = false;
         SysSettings.lawicelTimestamping = false;
-        SysSettings.numBuses = 1; //Currently we support CAN0
+        SysSettings.numBuses = 1; // Currently we support CAN0
         SysSettings.isWifiActive = false;
         SysSettings.isWifiConnected = false;
         strcpy(deviceName, MACC_NAME);
         strcpy(otaHost, "macchina.cc");
         strcpy(otaFilename, "/a0/files/a0ret.bin");
+        pinMode(SysSettings.LED_CONNECTION_STATUS, OUTPUT);
         pinMode(13, OUTPUT);
         digitalWrite(13, LOW);
         delay(100);
-        FastLED.addLeds<LED_TYPE, A0_LED_PIN, COLOR_ORDER>(leds, A0_NUM_LEDS).setCorrection( TypicalLEDStrip );
-        FastLED.setBrightness(  BRIGHTNESS );
-        leds[0] = CRGB::Red;
-        FastLED.show();
+        if (SysSettings.fancyLED)
+        {
+            FastLED.addLeds<LED_TYPE, A0_LED_PIN, COLOR_ORDER>(leds, A0_NUM_LEDS).setCorrection(TypicalLEDStrip);
+            FastLED.setBrightness(BRIGHTNESS);
+            leds[0] = CRGB::Red;
+            FastLED.show();
+        }
         pinMode(21, OUTPUT);
         digitalWrite(21, LOW);
         CAN0.setCANPins(GPIO_NUM_4, GPIO_NUM_5);
@@ -161,14 +167,14 @@ void loadSettings()
     if (settings.systemType == 2)
     {
         Logger::console("Running on Macchina 5-CAN");
-        canBuses[0] = &CAN0; //SWCAN on this hardware - DLC pin 1
-        canBuses[1] = &CAN1; //DLC pins 1 and 9. Overlaps with SWCAN
-        canBuses[2] = new MCP2517FD(33, 39); //DLC pins 3/11
-        canBuses[3] = new MCP2517FD(25, 34); //DLC pins 6/14
-        canBuses[4] = new MCP2517FD(14, 13); //DLC pins 12/13
+        canBuses[0] = &CAN0;                 // SWCAN on this hardware - DLC pin 1
+        canBuses[1] = &CAN1;                 // DLC pins 1 and 9. Overlaps with SWCAN
+        canBuses[2] = new MCP2517FD(33, 39); // DLC pins 3/11
+        canBuses[3] = new MCP2517FD(25, 34); // DLC pins 6/14
+        canBuses[4] = new MCP2517FD(14, 13); // DLC pins 12/13
 
-        //reconfigure the two already defined CAN buses to use the actual pins for this board.
-        CAN0.setCANPins(GPIO_NUM_4, GPIO_NUM_5); //rx, tx - This is the SWCAN interface
+        // reconfigure the two already defined CAN buses to use the actual pins for this board.
+        CAN0.setCANPins(GPIO_NUM_4, GPIO_NUM_5); // rx, tx - This is the SWCAN interface
         CAN1.setINTPin(36);
         CAN1.setCSPin(32);
         SysSettings.LED_CANTX = 0;
@@ -187,26 +193,25 @@ void loadSettings()
         SysSettings.isWifiActive = false;
         SysSettings.isWifiConnected = false;
 
-
-        FastLED.addLeds<LED_TYPE, A5_LED_PIN, COLOR_ORDER>(leds, A5_NUM_LEDS).setCorrection( TypicalLEDStrip );
-        FastLED.setBrightness(  BRIGHTNESS );
-        //With the board facing up and looking at the USB end the LEDs are 0 1 2 (USB) 3
-        //can test LEDs here for debugging but normally leave first three off and set connection to RED.
-        //leds[0] = CRGB::White;
-        //leds[1] = CRGB::Blue;
-        //leds[2] = CRGB::Green;
+        FastLED.addLeds<LED_TYPE, A5_LED_PIN, COLOR_ORDER>(leds, A5_NUM_LEDS).setCorrection(TypicalLEDStrip);
+        FastLED.setBrightness(BRIGHTNESS);
+        // With the board facing up and looking at the USB end the LEDs are 0 1 2 (USB) 3
+        // can test LEDs here for debugging but normally leave first three off and set connection to RED.
+        // leds[0] = CRGB::White;
+        // leds[1] = CRGB::Blue;
+        // leds[2] = CRGB::Green;
         leds[3] = CRGB::Red;
         FastLED.show();
 
         strcpy(deviceName, MACC_NAME);
         strcpy(otaHost, "macchina.cc");
         strcpy(otaFilename, "/a0/files/a0ret.bin");
-        //Single wire interface
+        // Single wire interface
         pinMode(SW_EN, OUTPUT);
         pinMode(SW_MODE0, OUTPUT);
         pinMode(SW_MODE1, OUTPUT);
-        digitalWrite(SW_EN, LOW);      //MUST be LOW to use CAN1 channel 
-        //HH = Normal Mode
+        digitalWrite(SW_EN, LOW); // MUST be LOW to use CAN1 channel
+        // HH = Normal Mode
         digitalWrite(SW_MODE0, HIGH);
         digitalWrite(SW_MODE1, HIGH);
     }
@@ -216,10 +221,10 @@ void loadSettings()
         Logger::console("Running on EVTV ESP32-S3 Board");
         canBuses[0] = &CAN0;
         canBuses[1] = &CAN1;
-        //CAN1.setINTPin(3);
-        //CAN1.setCSPin(10);
-        SysSettings.LED_CANTX = 255;//18;
-        SysSettings.LED_CANRX = 255;//18;
+        // CAN1.setINTPin(3);
+        // CAN1.setCSPin(10);
+        SysSettings.LED_CANTX = 255; // 18;
+        SysSettings.LED_CANRX = 255; // 18;
         SysSettings.LED_LOGGING = 255;
         SysSettings.LED_CONNECTION_STATUS = 255;
         SysSettings.fancyLED = false;
@@ -260,7 +265,7 @@ void loadSettings()
         sprintf(buff, "can%ispeed", i);
         settings.canSettings[i].nomSpeed = nvPrefs.getUInt(buff, 500000);
         sprintf(buff, "can%i_en", i);
-        settings.canSettings[i].enabled = nvPrefs.getBool(buff, (i < 2)?true:false);
+        settings.canSettings[i].enabled = nvPrefs.getBool(buff, (i < 2) ? true : false);
         sprintf(buff, "can%i-listenonly", i);
         settings.canSettings[i].listenOnly = nvPrefs.getBool(buff, false);
         sprintf(buff, "can%i-fdspeed", i);
@@ -273,21 +278,23 @@ void loadSettings()
 
     Logger::setLoglevel((Logger::LogLevel)settings.logLevel);
 
-    for (int rx = 0; rx < NUM_BUSES; rx++) SysSettings.lawicelBusReception[rx] = true; //default to showing messages on RX 
+    for (int rx = 0; rx < NUM_BUSES; rx++)
+        SysSettings.lawicelBusReception[rx] = true; // default to showing messages on RX
 }
 
 void setup()
 {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-    //for the ESP32S3 it will block if nothing is connected to USB and that can slow down the program
-    //if nothing is connected. But, you can't set 0 or writing rapidly to USB will lose data. It needs
-    //some sort of timeout but I'm not sure exactly how much is needed or if there is a better way
-    //to deal with this issue.
+    // for the ESP32S3 it will block if nothing is connected to USB and that can slow down the program
+    // if nothing is connected. But, you can't set 0 or writing rapidly to USB will lose data. It needs
+    // some sort of timeout but I'm not sure exactly how much is needed or if there is a better way
+    // to deal with this issue.
     Serial.setTxTimeoutMs(2);
 #endif
     Serial.begin(1000000); //for production
-    //Serial.begin(115200); //for testing
-    //delay(2000); //just for testing. Don't use in production
+    // Serial2.begin(115200, SERIAL_8N1, 12, 13); //for production
+    // Serial.begin(115200); // for testing
+    // delay(2000); //just for testing. Don't use in production
 
     espChipRevision = ESP.getChipRevision();
 
@@ -298,29 +305,29 @@ void setup()
 
     loadSettings();
 
-    //CAN0.setDebuggingMode(true);
-    //CAN1.setDebuggingMode(true);
+    CAN0.setDebuggingMode(true);
+    // CAN1.setDebuggingMode(true);
 
     canManager.setup();
 
-    if (settings.enableBT) 
+    if (settings.enableBT)
     {
         Serial.println("Starting bluetooth");
         elmEmulator.setup();
-        if (SysSettings.fancyLED && (settings.wifiMode == 0) )
+        if (SysSettings.fancyLED && (settings.wifiMode == 0))
         {
             leds[0] = CRGB::Green;
             FastLED.show();
         }
     }
-    
+
     /*else*/ wifiManager.setup();
 
     SysSettings.lawicelMode = false;
     SysSettings.lawicelAutoPoll = false;
     SysSettings.lawicelTimestamping = false;
     SysSettings.lawicelPollCounter = 0;
-    
+
     elmEmulator.setup();
 
     Serial.print("Free heap after setup: ");
@@ -358,14 +365,15 @@ fastest and safest with limited function calls
 */
 void loop()
 {
-    //uint32_t temp32;    
+    // uint32_t temp32;
     bool isConnected = false;
     int serialCnt;
     uint8_t in_byte;
 
     /*if (Serial)*/ isConnected = true;
 
-    if (SysSettings.lawicelPollCounter > 0) SysSettings.lawicelPollCounter--;
+    if (SysSettings.lawicelPollCounter > 0)
+        SysSettings.lawicelPollCounter--;
     //}
 
     canManager.loop();
@@ -373,13 +381,13 @@ void loop()
 
     size_t wifiLength = wifiGVRET.numAvailableBytes();
     size_t serialLength = serialGVRET.numAvailableBytes();
-    size_t maxLength = (wifiLength>serialLength) ? wifiLength : serialLength;
+    size_t maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
 
-    //If the max time has passed or the buffer is almost filled then send buffered data out
-    if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)) ) 
+    // If the max time has passed or the buffer is almost filled then send buffered data out
+    if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)))
     {
         lastFlushMicros = micros();
-        if (serialLength > 0) 
+        if (serialLength > 0)
         {
             Serial.write(serialGVRET.getBufferedBytes(), serialLength);
             serialGVRET.clearBufferedBytes();
@@ -391,7 +399,7 @@ void loop()
     }
 
     serialCnt = 0;
-    while ( (Serial.available() > 0) && serialCnt < 128 ) 
+    while ((Serial.available() > 0) && serialCnt < 128)
     {
         serialCnt++;
         in_byte = Serial.read();

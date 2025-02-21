@@ -42,6 +42,7 @@ void CANManager::setup()
     {
         if (settings.canSettings[i].enabled)
         {
+            canBuses[i]->enable();
             if ((settings.canSettings[i].fdMode == 0) || !canBuses[i]->supportsFDMode())
             {
                 canBuses[i]->begin(settings.canSettings[i].nomSpeed);
@@ -57,7 +58,7 @@ void CANManager::setup()
                   Serial.println("Enabling CAN1 will force CAN0 off.");
                 }
                 //no need to do this for the built-in CAN
-                if (i > 0) canBuses[i]->enable();
+                // if (i > 0) canBuses[i]->enable();
             }
             else
             {
